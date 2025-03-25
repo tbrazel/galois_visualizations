@@ -38,14 +38,37 @@ end
 #####################
 
 # Plug in your favorite group here and extract its multiplication table
-GAP.evalstr("G:=SymmetricGroup(3); n:= Order(G);")
-gap_matx = GAP.evalstr("M:= MultiplicationTable(G);")
 
-# Convert the multiplication table (which is a GAP object) to Julia:
-#   more about GAP -> Julia conversion here: https://oscar-system.github.io/GAP.jl/dev/conversion/
-julia_matx = Matrix{Int64}(gap_matx)
+longname = "SymmetricGroup(3)"
+shortname = "S3"
 
-# Create an image out of the matrix // change the cell_size in order to scale the image to a new resolution
-S3_img = matrix_to_image(julia_matx,cell_size=40)
-println("Saving image to: ", pwd())
-save("s3.png", S3_img)
+function gap_group_to_img(longname,shortname)
+    gpname = string("G:=",longname,";")
+    print(gpname)
+    GAP.evalstr(gpname)
+    GAP.evalstr("n:= Order(G);")
+    gap_matx = GAP.evalstr("M:= MultiplicationTable(G);")
+
+    # Convert the multiplication table (which is a GAP object) to Julia:
+    #   more about GAP -> Julia conversion here: https://oscar-system.github.io/GAP.jl/dev/conversion/
+    julia_matx = Matrix{Int64}(gap_matx)
+
+    # # Create an image out of the matrix // change the cell_size in order to scale the image to a new resolution
+    img_file = matrix_to_image(julia_matx,cell_size=40)
+    println("Saving image to: ", pwd())
+    img_filename = string(shortname,".png")
+    save(img_filename, img_file)
+end
+
+groups_to_build_cayley_tables_for = [
+    ["CyclicGroup(2)","C2"],
+    ["CyclicGroup(3)","C3"],
+    ["CyclicGroup(4)","C4"],
+    ["SmallGroup(4,2)","K4"],       # Klein 4-group by GAP ID
+    ["SymmetricGroup(3)","S3"],
+    ["SymmetricGroup(4)","S4"],
+]
+
+for g in groups_to_build_cayley_tables_for
+    gap_group_to_img(g[1],g[2])
+end
