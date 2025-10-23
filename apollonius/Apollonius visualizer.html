@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Circles of Apollonius — Interactive Visualizer (v4.2)</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #475569;
+    --panel: #f8fafc;
+    --accent: #2563eb;     /* given circles + handles */
+    --accent-2: #ef4444;   /* solution circles */
+    --grid: #e2e8f0;
+    --ring: rgba(37, 99, 235, .15);
+    --shadow: 0 10px 30px rgba(2, 6, 23, .08);
+    --label: #111827;
+  }
+  [data-theme="dark"] {
+    --bg: #0b1020;
+    --fg: #e5e7eb;
+    --muted: #94a3b8;
+    --panel: #0f172a;
+    --accent: #60a5fa;
+    --accent-2: #f87171;
+    --grid: #1f2937;
+    --ring: rgba(96, 165, 250, .2);
+    --shadow: 0 10px 30px rgba(0,0,0,.35);
+    --label: #e5e7eb;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 16px;
+    height: 100dvh;
+    min-height: 560px;
+    padding: 16px;
+  }
+  @media (max-width: 1000px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--grid);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 14px 16px;
+  }
+  .title {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .title h1 { margin: 0; font-size: 18px; }
+  .subtle { color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+  .badge { display: inline-flex; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--grid); }
+  .dot { width: 10px; height: 10px; border-radius: 999px; }
+  .dot.blue { background: var(--accent); }
+  .dot.red { background: var(--accent-2); }
+  .controls-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .switch {
+    display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+    user-select: none; padding: 6px 10px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--grid);
+    box-shadow: var(--shadow);
+  }
+  .switch input { display: none; }
+  .switch .thumb { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center; background: var(--bg); border: 1px solid var(--grid); }
+  button.btn {
+    appearance: none; border: 1px solid var(--grid); background: var(--panel);
+    color: var(--fg); padding: 6px 10px; border-radius: 10px; cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  button.btn:active { transform: translateY(1px); }
+
+  .stat { margin-top: 10px; padding: 8px; border: 1px dashed var(--grid); border-radius: 8px; color: var(--muted); }
+
+  .canvas-wrap {
+    position: relative;
+    height: 100%;
+    min-height: 560px;
+    border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--grid); background: var(--bg); box-shadow: var(--shadow);
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  canvas.hover { cursor: pointer; }
+  canvas.grab { cursor: grab; }
+  canvas.grabbing { cursor: grabbing; }
+
+  .hint {
+    position: absolute; bottom: 10px; right: 12px; padding: 6px 10px;
+    border-radius: 999px; background: var(--panel); border: 1px solid var(--grid);
+    color: var(--muted);
+  }
+</style>
+</head>
+<body data-theme="light">
+  <div class="app">
+    <aside class="panel">
+      <div class="title">
+        <div>
+          <h1>Circles of Apollonius</h1>
+          <div class="subtle">Drag centers (solid dots) • Drag radius handles (ring dots) • Pan/zoom</div>
+        </div>
+        <div class="controls-inline">
+          <button id="reset" class="btn">Reset</button>
+          <label class="switch" title="Toggle light/dark">
+            <input id="themeToggle" type="checkbox" />
+            <span class="thumb" aria-hidden="true">🌓</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="badge"><span class="dot blue"></span> Given circles</span>
+        <span class="badge"><span class="dot red"></span> Solution circles</span>
+      </div>
+
+      <div class="stat">
+        Real solutions found: <strong id="count">0</strong>
+      </div>
+      <div class="stat">
+        Tips: Shift-drag to pan. Scroll to zoom about the mouse. Drag the small ring on a circle to resize it.
+      </div>
+    </aside>
+
+    <main class="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div class="hint">Drag centers • Drag radius handles • Shift+Drag pan • Scroll zoom</div>
+    </main>
+  </div>
+
+<script>
+(() => {
+  const $ = (sel) => document.querySelector(sel);
+  const canvas = $('#canvas');
+  const ctx = canvas.getContext('2d', {alpha: true});
+
+  // Theme toggle
+  $('#themeToggle').addEventListener('change', (e) => {
+    document.body.setAttribute('data-theme', e.target.checked ? 'dark' : 'light');
+    draw();
+  });
+  $('#reset').addEventListener('click', () => {
+    circles = [
+      { id: 'C1', cx: 0, cy: 0,  r: 1, th: 0 },
+      { id: 'C2', cx: 2, cy: 0,  r: 1, th: 0 },
+      { id: 'C3', cx: 1, cy: 1.5, r: 1, th: 0 },
+    ];
+    view.scale = 80; view.ox = 0; view.oy = 0;
+    draw();
+  });
+
+  // State
+  let circles = [
+    { id: 'C1', cx: 0, cy: 0,  r: 1, th: 0 },
+    { id: 'C2', cx: 2, cy: 0,  r: 1, th: 0 },
+    { id: 'C3', cx: 1, cy: 1.5, r: 1, th: 0 },
+  ];
+  const view = { scale: 80, ox: 0, oy: 0 };
+
+  // Robust canvas sizing
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const cssW = Math.max(1, rect.width|0);
+    const cssH = Math.max(1, rect.height|0);
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+  window.addEventListener('load', () => requestAnimationFrame(resize), {once: true});
+  window.addEventListener('resize', resize, {passive: true});
+
+  function canvasSize() {
+    const rect = canvas.getBoundingClientRect();
+    return { W: Math.max(1, rect.width|0), H: Math.max(1, rect.height|0) };
+  }
+
+  // Coordinate transforms (CSS pixels)
+  function worldToScreen(x, y) {
+    const { W, H } = canvasSize();
+    return [view.ox + x * view.scale + W/2, view.oy - y * view.scale + H/2];
+  }
+  function screenToWorld(px, py) {
+    const { W, H } = canvasSize();
+    return [(px - W/2 - view.ox) / view.scale, -(py - H/2 - view.oy) / view.scale];
+  }
+
+  // Pointer helpers: convert event to canvas-local CSS coords
+  function getLocal(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  // Interaction
+  let dragging = null; // {type:'center'|'radius', idx:number} or 'pan'
+  let last = {x: 0, y: 0};
+
+  function hitTest(px, py) {
+    const R_HANDLE = 12;
+    const C_HANDLE = 10;
+    // radius handles first
+    for (let i=0; i<circles.length; i++) {
+      const c = circles[i];
+      const hx = c.cx + c.r * Math.cos(c.th);
+      const hy = c.cy + c.r * Math.sin(c.th);
+      const [sx, sy] = worldToScreen(hx, hy);
+      if (Math.hypot(px - sx, py - sy) <= R_HANDLE + 3) return {type: 'radius', idx: i};
+    }
+    // then centers
+    for (let i=0; i<circles.length; i++) {
+      const c = circles[i];
+      const [sx, sy] = worldToScreen(c.cx, c.cy);
+      if (Math.hypot(px - sx, py - sy) <= C_HANDLE + 3) return {type: 'center', idx: i};
+    }
+    return null;
+  }
+
+  function setCursor(px, py) {
+    const hit = hitTest(px, py);
+    if (!hit) {
+      canvas.classList.remove('hover', 'grab', 'grabbing');
+      canvas.classList.add('grab');
+      return;
+    }
+    canvas.classList.remove('grab', 'grabbing');
+    canvas.classList.add('hover');
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const p = getLocal(e);
+    canvas.setPointerCapture?.(e.pointerId);
+    if (e.shiftKey) {
+      dragging = 'pan';
+      last.x = p.x; last.y = p.y;
+      canvas.classList.remove('hover', 'grab');
+      canvas.classList.add('grabbing');
+      return;
+    }
+    const hit = hitTest(p.x, p.y);
+    if (hit) {
+      dragging = hit;
+      canvas.classList.remove('hover', 'grab');
+      canvas.classList.add('grabbing');
+    } else {
+      dragging = 'pan';
+      last.x = p.x; last.y = p.y;
+      canvas.classList.remove('hover', 'grab');
+      canvas.classList.add('grabbing');
+    }
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    const p = getLocal(e);
+    if (!dragging) { setCursor(p.x, p.y); return; }
+    if (dragging === 'pan') {
+      const dx = p.x - last.x;
+      const dy = p.y - last.y;
+      view.ox += dx; view.oy += dy;
+      last.x = p.x; last.y = p.y;
+      draw();
+      return;
+    }
+    const hit = dragging;
+    const c = circles[hit.idx];
+    const [wx, wy] = screenToWorld(p.x, p.y);
+    if (hit.type === 'center') {
+      c.cx = wx; c.cy = wy;
+    } else if (hit.type === 'radius') {
+      const dx = wx - c.cx, dy = wy - c.cy;
+      c.r = Math.max(0, Math.hypot(dx, dy));
+      c.th = Math.atan2(dy, dx);
+    }
+    draw();
+  }, {passive: true});
+
+  function stopDrag(e){
+    dragging = null;
+    canvas.releasePointerCapture?.(e.pointerId);
+    canvas.classList.remove('grabbing');
+    canvas.classList.add('grab');
+  }
+  canvas.addEventListener('pointerup', stopDrag);
+  canvas.addEventListener('pointercancel', stopDrag);
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const p = getLocal(e);
+    const scaleFactor = Math.exp(-e.deltaY * 0.001);
+    const [wx0, wy0] = screenToWorld(p.x, p.y);
+    view.scale = Math.max(10, Math.min(800, view.scale * scaleFactor));
+    const [sx1, sy1] = worldToScreen(wx0, wy0);
+    view.ox += (p.x - sx1);
+    view.oy += (p.y - sy1);
+    draw();
+  }, {passive: false});
+
+  // ---- Apollonius solver (renamed params to avoid shadowing/TDZ) ----
+  function solveApollonius(p1, p2, p3, R1, R2, R3) {
+    const sols = [];
+    const signs = [
+      [ 1,  1,  1], [ 1,  1, -1],
+      [ 1, -1,  1], [ 1, -1, -1],
+      [-1,  1,  1], [-1,  1, -1],
+      [-1, -1,  1], [-1, -1, -1],
+    ];
+    const eps = 1e-10;
+
+    for (const [s1, s2, s3] of signs) {
+      const dx12 = p1.x - p2.x, dy12 = p1.y - p2.y;
+      const dx13 = p1.x - p3.x, dy13 = p1.y - p3.y;
+      const c1n = p1.x*p1.x + p1.y*p1.y;
+      const c2n = p2.x*p2.x + p2.y*p2.y;
+      const c3n = p3.x*p3.x + p3.y*p3.y;
+      const b12 = (R1*R1 - R2*R2) - (c1n - c2n);
+      const b13 = (R1*R1 - R3*R3) - (c1n - c3n);
+
+      const A = [[dx12, dy12], [dx13, dy13]];
+      const d_r = [-(s1*R1 - s2*R2), -(s1*R1 - s3*R3)]; // times rho
+      const d_0 = [-0.5*b12, -0.5*b13];
+
+      const det = A[0][0]*A[1][1] - A[0][1]*A[1][0];
+      if (Math.abs(det) < eps) continue;
+
+      const invDet = 1/det;
+      const invMul = (v0, v1) => ({
+        x: ( v0*A[1][1] - v1*A[0][1]) * invDet,
+        y: (-v0*A[1][0] + v1*A[0][0]) * invDet,
+      });
+
+      const P0 = invMul(d_0[0], d_0[1]);
+      const Pr = invMul(d_r[0], d_r[1]);
+
+      const u0x = P0.x - p1.x, u0y = P0.y - p1.y;
+      const urx = Pr.x, ury = Pr.y;
+
+      const A2 = (urx*urx + ury*ury) - 1;
+      const B2 = 2*(u0x*urx + u0y*ury) - 2*s1*R1;
+      const C2 = (u0x*u0x + u0y*u0y) - (s1*R1)*(s1*R1);
+
+      let roots = [];
+      if (Math.abs(A2) < eps) {
+        if (Math.abs(B2) < eps) continue;
+        roots = [-C2 / B2];
+      } else {
+        const D = B2*B2 - 4*A2*C2;
+        if (D < -1e-9) continue;
+        if (Math.abs(D) < 1e-9) {
+          roots = [-B2 / (2*A2)];
+        } else {
+          const sqrtD = Math.sqrt(Math.max(0, D));
+          roots = [(-B2 - sqrtD)/(2*A2), (-B2 + sqrtD)/(2*A2)];
+        }
+      }
+
+      for (const rho of roots) {
+        if (!isFinite(rho) || rho < -1e-7) continue;
+        const x = P0.x + Pr.x*rho;
+        const y = P0.y + Pr.y*rho;
+        if (!isFinite(x) || !isFinite(y)) continue;
+        sols.push({x, y, r: Math.max(0, rho)});
+      }
+    }
+
+    // Deduplicate nearly-identical circles
+    const uniq = [];
+    const tol = 1e-4;
+    outer: for (const s of sols) {
+      for (const t of uniq) {
+        if (Math.hypot(s.x - t.x, s.y - t.y) < tol && Math.abs(s.r - t.r) < tol) {
+          continue outer;
+        }
+      }
+      uniq.push(s);
+    }
+    return uniq;
+  }
+
+  // Drawing
+  function drawGrid() {
+    const { W, H } = canvasSize();
+    const bg = getComputedStyle(document.body).getPropertyValue('--bg');
+    const grid = getComputedStyle(document.body).getPropertyValue('--grid');
+    const axis = getComputedStyle(document.body).getPropertyValue('--muted');
+
+    ctx.save();
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // grid lines
+    const [x0w, y0w] = screenToWorld(0, 0);
+    const [x1w, y1w] = screenToWorld(W, H);
+    const xStart = Math.floor(x0w), xEnd = Math.ceil(x1w);
+    const yStart = Math.floor(y1w), yEnd = Math.ceil(y0w);
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = xStart; x <= xEnd; x++) {
+      const [sx] = worldToScreen(x, 0);
+      ctx.moveTo(sx + .5, 0); ctx.lineTo(sx + .5, H);
+    }
+    for (let y = yStart; y <= yEnd; y++) {
+      const [, sy] = worldToScreen(0, y);
+      ctx.moveTo(0, sy + .5); ctx.lineTo(W, sy + .5);
+    }
+    ctx.stroke();
+
+    // axes
+    ctx.strokeStyle = axis; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const [sx0, sy0] = worldToScreen(0, 0);
+    ctx.moveTo(0, sy0 + .5); ctx.lineTo(W, sy0 + .5);
+    ctx.moveTo(sx0 + .5, 0); ctx.lineTo(sx0 + .5, H);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function circleStroke() {
+    return getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#2563eb';
+  }
+  function solutionStroke() {
+    return getComputedStyle(document.body).getPropertyValue('--accent-2').trim() || '#ef4444';
+  }
+
+  function drawCircle(cx, cy, r, stroke, width=2, alpha=1) {
+    const [sx, sy] = worldToScreen(cx, cy);
+    const rad = r * view.scale;
+    if (rad < 0.5) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(sx, sy, rad, 0, Math.PI*2);
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = width;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawHandle(cx, cy, filled=true) {
+    const [sx, sy] = worldToScreen(cx, cy);
+    const border = (document.body.getAttribute('data-theme') === 'dark') ? '#e5e7eb' : '#111827';
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = border;
+    ctx.fillStyle = circleStroke();
+    ctx.beginPath();
+    ctx.arc(sx, sy, 7.5, 0, Math.PI*2);
+    if (filled) ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function draw() {
+    const { W, H } = canvasSize();
+    if (W === 0 || H === 0) return;
+
+    drawGrid();
+
+    // Given circles + handles
+    const cs = circleStroke();
+    for (const c of circles) {
+      drawCircle(c.cx, c.cy, c.r, cs, 3, 1);
+      // center (solid) and radius (ring) handles
+      drawHandle(c.cx, c.cy, true);
+      const hx = c.cx + c.r * Math.cos(c.th);
+      const hy = c.cy + c.r * Math.sin(c.th);
+      drawHandle(hx, hy, false);
+    }
+
+    // Solve & draw solutions (rename locals to avoid 'C1/C2' names)
+    const p1 = {x: circles[0].cx, y: circles[0].cy};
+    const p2 = {x: circles[1].cx, y: circles[1].cy};
+    const p3 = {x: circles[2].cx, y: circles[2].cy};
+    const sols = solveApollonius(p1, p2, p3, circles[0].r, circles[1].r, circles[2].r);
+    $('#count').textContent = String(sols.length);
+    const ss = solutionStroke();
+    for (const s of sols) drawCircle(s.x, s.y, s.r, ss, 3, 0.95);
+  }
+
+  // First paint
+  resize();
+})(); 
+</script>
+</body>
+</html>

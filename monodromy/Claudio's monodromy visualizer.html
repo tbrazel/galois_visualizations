@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monodromy Visualizer</title>
+    <style>
+        body {
+            font-family: 'SF Pro Text', -apple-system, system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #2c3e50;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 2rem;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #6c757d;
+            margin-bottom: 24px;
+            font-size: 1rem;
+        }
+        
+        .controls {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        label {
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        select, button {
+            padding: 6px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            font-weight: 500;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .visualization-container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        
+        .canvas-container {
+            background: white;
+            border-radius: 6px;
+            padding: 12px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .canvas-title {
+            text-align: center;
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+        
+        canvas {
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            cursor: crosshair;
+        }
+        
+        .instructions {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .instructions p {
+            margin: 8px 0;
+            line-height: 1.5;
+        }
+        
+        .math-display {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 12px;
+            margin: 12px 0;
+            font-family: 'SF Mono', Monaco, monospace;
+            text-align: center;
+            color: #495057;
+        }
+        
+        .info-panel {
+            background: #fff8e1;
+            border: 1px solid #ffcc02;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 16px;
+        }
+        
+        .info-panel p {
+            margin: 8px 0;
+            line-height: 1.5;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 12px 0;
+            font-weight: 500;
+            color: #495057;
+            font-size: 14px;
+        }
+        
+        @media (max-width: 768px) {
+            .visualization-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .control-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Monodromy Visualizer</h1>
+        <div class="subtitle">Interactive visualization of algebraic function monodromy</div>
+        
+        <div class="instructions">
+            <p><strong>Click and drag</strong> on the left panel to move the basepoint. <strong>Watch</strong> how roots evolve on the right panel. <strong>Choose</strong> different functions to explore monodromy behavior.</p>
+            <p><strong>Keys:</strong> C (clear), R (reset), Space (animate), 1-7 (functions)</p>
+        </div>
+        
+        <div class="controls">
+            <div class="control-row">
+                <div class="control-group">
+                    <label for="functionSelect">Polynomial Function:</label>
+                    <select id="functionSelect">
+                        <option value="sqrt">√x (Square root)</option>
+                        <option value="quartic">y⁴ - 4xy² + 4 = 0</option>
+                        <option value="cubic">y³ + y + x = 0 (Bring cubic)</option>
+                        <option value="quintic">y⁵ + y + x = 0 (Bring quintic)</option>
+                        <option value="elliptic">y² = x³ - x (Elliptic curve)</option>
+                        <option value="hyperelliptic">y² = x⁵ - x (Hyperelliptic)</option>
+                        <option value="fermat">x³ + y³ = 1 (Fermat cubic)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <button onclick="clearTrajectories()">Clear Trajectories (C)</button>
+                    <button onclick="resetPosition()">Reset Position (R)</button>
+                    <button onclick="toggleAnimation()">Toggle Animation (Space)</button>
+                    <button onclick="forceRefreshRoots()">Refresh Roots</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="math-display" id="mathDisplay">F(x,y) = y² - x = 0</div>
+        
+        <div class="visualization-container">
+            <div class="canvas-container">
+                <div class="canvas-title">x-plane (Click and drag to move basepoint)</div>
+                <canvas id="xCanvas" width="500" height="500"></canvas>
+            </div>
+            
+            <div class="canvas-container">
+                <div class="canvas-title">y-plane (Root evolution)</div>
+                <canvas id="yCanvas" width="500" height="500"></canvas>
+            </div>
+        </div>
+        
+        <div class="status" id="status">Current position: x = 1.000 + 0.000i | Roots: y = ±1.000</div>
+        
+        <div class="info-panel">
+            <p><strong>Monodromy:</strong> How solutions change as parameters move in the complex plane.</p>
+            <p><strong>Black dots:</strong> Critical points where roots collide and branch.</p>
+            <p><strong>Colored lines:</strong> Root trajectories showing evolution paths.</p>
+        </div>
+    </div>
+
+    <script>
+        // Mathematical constants and utilities
+        const EPSILON = 1e-10;
+        const MAX_ITERATIONS = 100;
+        
+        // Complex number operations
+        class Complex {
+            constructor(real, imag = 0) {
+                this.real = real;
+                this.imag = imag;
+            }
+            
+            add(other) {
+                return new Complex(this.real + other.real, this.imag + other.imag);
+            }
+            
+            subtract(other) {
+                return new Complex(this.real - other.real, this.imag - other.imag);
+            }
+            
+            multiply(other) {
+                if (typeof other === 'number') {
+                    return new Complex(this.real * other, this.imag * other);
+                }
+                return new Complex(
+                    this.real * other.real - this.imag * other.imag,
+                    this.real * other.imag + this.imag * other.real
+                );
+            }
+            
+            divide(other) {
+                const denom = other.real * other.real + other.imag * other.imag;
+                return new Complex(
+                    (this.real * other.real + this.imag * other.imag) / denom,
+                    (this.imag * other.real - this.real * other.imag) / denom
+                );
+            }
+            
+            power(n) {
+                if (n === 0) return new Complex(1, 0);
+                if (n === 1) return new Complex(this.real, this.imag);
+                
+                const r = this.magnitude();
+                const theta = this.argument();
+                const newR = Math.pow(r, n);
+                const newTheta = n * theta;
+                
+                return new Complex(
+                    newR * Math.cos(newTheta),
+                    newR * Math.sin(newTheta)
+                );
+            }
+            
+            magnitude() {
+                return Math.sqrt(this.real * this.real + this.imag * this.imag);
+            }
+            
+            argument() {
+                return Math.atan2(this.imag, this.real);
+            }
+            
+            conjugate() {
+                return new Complex(this.real, -this.imag);
+            }
+            
+            toString() {
+                const sign = this.imag >= 0 ? '+' : '-';
+                return `${this.real.toFixed(3)} ${sign} ${Math.abs(this.imag).toFixed(3)}i`;
+            }
+            
+            equals(other, tolerance = EPSILON) {
+                return Math.abs(this.real - other.real) < tolerance && 
+                       Math.abs(this.imag - other.imag) < tolerance;
+            }
+        }
+        
+        // Polynomial definitions
+        const polynomials = {
+            sqrt: {
+                name: "√x",
+                equation: "y² - x = 0",
+                evaluate: (x, y) => y.power(2).subtract(x),
+                derivative: (x, y) => y.multiply(2),
+                degree: 2,
+                domain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                codomain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                initialX: new Complex(1, 0),
+                criticalPoints: [new Complex(0, 0)]
+            },
+            quartic: {
+                name: "Quartic",
+                equation: "y⁴ - 4xy² + 4 = 0",
+                evaluate: (x, y) => y.power(4).subtract(x.multiply(4).multiply(y.power(2))).add(new Complex(4, 0)),
+                derivative: (x, y) => y.power(3).multiply(4).subtract(x.multiply(8).multiply(y)),
+                degree: 4,
+                domain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                codomain: {xMin: -2.5, xMax: 2.5, yMin: -2.5, yMax: 2.5},
+                initialX: new Complex(0, 0),
+                criticalPoints: [
+                    new Complex(0, 0),
+                    new Complex(2, 0),
+                    new Complex(-2, 0)
+                ]
+            },
+            cubic: {
+                name: "Bring Cubic",
+                equation: "y³ + y + x = 0",
+                evaluate: (x, y) => y.power(3).add(y).add(x),
+                derivative: (x, y) => y.power(2).multiply(3).add(new Complex(1, 0)),
+                degree: 3,
+                domain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                codomain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                initialX: new Complex(1, 0),
+                criticalPoints: [
+                    new Complex(-2/Math.sqrt(27), 0),
+                    new Complex(2/Math.sqrt(27), 0)
+                ]
+            },
+            quintic: {
+                name: "Bring Quintic",
+                equation: "y⁵ + y + x = 0",
+                evaluate: (x, y) => y.power(5).add(y).add(x),
+                derivative: (x, y) => y.power(4).multiply(5).add(new Complex(1, 0)),
+                degree: 5,
+                domain: {xMin: -1, xMax: 1, yMin: -1, yMax: 1},
+                codomain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                initialX: new Complex(0, 0),
+                criticalPoints: [
+                    new Complex(0.4 * Math.cos(0), 0.4 * Math.sin(0)),
+                    new Complex(0.4 * Math.cos(2*Math.PI/5), 0.4 * Math.sin(2*Math.PI/5)),
+                    new Complex(0.4 * Math.cos(4*Math.PI/5), 0.4 * Math.sin(4*Math.PI/5)),
+                    new Complex(0.4 * Math.cos(6*Math.PI/5), 0.4 * Math.sin(6*Math.PI/5)),
+                    new Complex(0.4 * Math.cos(8*Math.PI/5), 0.4 * Math.sin(8*Math.PI/5))
+                ]
+            },
+            elliptic: {
+                name: "Elliptic Curve",
+                equation: "y² - x³ + x = 0",
+                evaluate: (x, y) => y.power(2).subtract(x.power(3)).add(x),
+                derivative: (x, y) => y.multiply(2),
+                degree: 2,
+                domain: {xMin: -2, xMax: 2, yMin: -2, yMax: 2},
+                codomain: {xMin: -2.5, xMax: 2.5, yMin: -2.5, yMax: 2.5},
+                initialX: new Complex(1.5, 0),
+                criticalPoints: [
+                    new Complex(1, 0),
+                    new Complex(-1, 0),
+                    new Complex(0, 0)
+                ]
+            },
+            hyperelliptic: {
+                name: "Hyperelliptic",
+                equation: "y² - x⁵ + x = 0",
+                evaluate: (x, y) => y.power(2).subtract(x.power(5)).add(x),
+                derivative: (x, y) => y.multiply(2),
+                degree: 2,
+                domain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                codomain: {xMin: -2, xMax: 2, yMin: -2, yMax: 2},
+                initialX: new Complex(1, 0),
+                criticalPoints: [
+                    new Complex(0.2 * Math.cos(0), 0.2 * Math.sin(0)),
+                    new Complex(0.2 * Math.cos(2*Math.PI/5), 0.2 * Math.sin(2*Math.PI/5)),
+                    new Complex(0.2 * Math.cos(4*Math.PI/5), 0.2 * Math.sin(4*Math.PI/5)),
+                    new Complex(0.2 * Math.cos(6*Math.PI/5), 0.2 * Math.sin(6*Math.PI/5)),
+                    new Complex(0.2 * Math.cos(8*Math.PI/5), 0.2 * Math.sin(8*Math.PI/5))
+                ]
+            },
+            fermat: {
+                name: "Fermat Cubic",
+                equation: "x³ + y³ - 1 = 0",
+                evaluate: (x, y) => x.power(3).add(y.power(3)).subtract(new Complex(1, 0)),
+                derivative: (x, y) => y.power(2).multiply(3),
+                degree: 3,
+                domain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                codomain: {xMin: -1.5, xMax: 1.5, yMin: -1.5, yMax: 1.5},
+                initialX: new Complex(0.5, 0),
+                criticalPoints: [
+                    new Complex(0, 0),
+                    new Complex(1, 0),
+                    new Complex(-0.5, 0.866),
+                    new Complex(-0.5, -0.866)
+                ]
+            }
+        };
+        
+        // Global state
+        let currentPolynomial = polynomials.sqrt;
+        let currentX = new Complex(1, 0);
+        let currentRoots = [];
+        let rootTrajectories = [];
+        let criticalPoints = [];
+        let isDragging = false;
+        let isAnimating = false;
+        let animationAngle = 0;
+        let animationRadius = 0.8;
+        const MAX_TRAJECTORY_LENGTH = 500; // Limit trajectory length for performance
+        
+        // Canvas setup
+        const xCanvas = document.getElementById('xCanvas');
+        const yCanvas = document.getElementById('yCanvas');
+        const xCtx = xCanvas.getContext('2d');
+        const yCtx = yCanvas.getContext('2d');
+        
+        // Newton-Raphson method for finding roots with better initial guesses
+        function findRoots(x, polynomial, initialGuesses = null) {
+            const allRoots = [];
+            const degree = polynomial.degree;
+            let attempts = degree * 3; // More attempts than degree
+            
+            // Special handling for high-degree polynomials
+            if (degree > 10) {
+                attempts = Math.min(degree * 2, 50); // Limit for performance
+            }
+            
+            // Generate diverse initial guesses
+            const guesses = [];
+            if (initialGuesses && initialGuesses.length === degree) {
+                guesses.push(...initialGuesses);
+            } else {
+                // Circle-based guesses with multiple radii
+                const radii = [0.5, 1.0, 1.5, 2.0];
+                let guessIndex = 0;
+                
+                for (let radiusIndex = 0; radiusIndex < radii.length && guessIndex < degree; radiusIndex++) {
+                    const radius = radii[radiusIndex];
+                    const numGuessesForRadius = Math.ceil((degree - guessIndex) / (radii.length - radiusIndex));
+                    
+                    for (let i = 0; i < numGuessesForRadius && guessIndex < degree; i++) {
+                        const angle = (2 * Math.PI * i) / numGuessesForRadius + Math.random() * 0.2;
+                        guesses.push(new Complex(
+                            radius * Math.cos(angle), 
+                            radius * Math.sin(angle)
+                        ));
+                        guessIndex++;
+                    }
+                }
+            }
+            
+            // Add random guesses for robustness
+            while (guesses.length < attempts) {
+                const radius = Math.random() * 3 + 0.2;
+                const angle = Math.random() * 2 * Math.PI;
+                guesses.push(new Complex(
+                    radius * Math.cos(angle),
+                    radius * Math.sin(angle)
+                ));
+            }
+            
+            // Find roots from all guesses
+            for (let guess of guesses) {
+                let y = new Complex(guess.real, guess.imag);
+                let iterations = degree > 10 ? Math.min(MAX_ITERATIONS, 50) : MAX_ITERATIONS;
+                
+                for (let iter = 0; iter < iterations; iter++) {
+                    try {
+                        const f = polynomial.evaluate(x, y);
+                        const df = polynomial.derivative(x, y);
+                        
+                        if (df.magnitude() < EPSILON) break;
+                        
+                        const delta = f.divide(df);
+                        y = y.subtract(delta);
+                        
+                        if (delta.magnitude() < EPSILON) break;
+                        
+                        // Prevent divergence
+                        if (y.magnitude() > 100) break;
+                        
+                    } catch (error) {
+                        // Skip if numerical issues
+                        break;
+                    }
+                }
+                
+                // Check if this is a valid root
+                try {
+                    const error = polynomial.evaluate(x, y).magnitude();
+                    const tolerance = degree > 10 ? 1e-3 : 1e-6; // Relaxed tolerance for high-degree
+                    
+                    if (error < tolerance && y.magnitude() < 50) {
+                        // Check if we already have this root
+                        let isDuplicate = false;
+                        const duplicateTolerance = degree > 10 ? 1e-2 : 1e-4;
+                        
+                        for (let existingRoot of allRoots) {
+                            if (y.subtract(existingRoot).magnitude() < duplicateTolerance) {
+                                isDuplicate = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!isDuplicate) {
+                            allRoots.push(y);
+                        }
+                    }
+                } catch (error) {
+                    // Skip if evaluation fails
+                    continue;
+                }
+            }
+            
+            // For high-degree polynomials, we might not find all roots
+            // Return what we found, up to the degree
+            const maxRoots = degree > 10 ? Math.min(degree, 10) : degree;
+            return allRoots.slice(0, maxRoots);
+        }
+        
+        // Find the closest root to continue the trajectory
+        function findClosestRoots(newRoots, oldRoots) {
+            if (!oldRoots || oldRoots.length === 0) return newRoots;
+            if (newRoots.length !== oldRoots.length) return newRoots;
+            
+            const matched = new Array(oldRoots.length);
+            const used = new Set();
+            
+            // Use Hungarian algorithm approach for optimal matching
+            for (let i = 0; i < oldRoots.length; i++) {
+                let minDist = Infinity;
+                let bestMatch = -1;
+                
+                for (let j = 0; j < newRoots.length; j++) {
+                    if (used.has(j)) continue;
+                    
+                    const dist = oldRoots[i].subtract(newRoots[j]).magnitude();
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestMatch = j;
+                    }
+                }
+                
+                if (bestMatch !== -1) {
+                    matched[i] = newRoots[bestMatch];
+                    used.add(bestMatch);
+                } else {
+                    matched[i] = oldRoots[i]; // Keep old root if no good match
+                }
+            }
+            
+            return matched;
+        }
+        
+        // Coordinate transformation
+        function complexToCanvas(z, canvas, domain) {
+            const x = ((z.real - domain.xMin) / (domain.xMax - domain.xMin)) * canvas.width;
+            const y = ((domain.yMax - z.imag) / (domain.yMax - domain.yMin)) * canvas.height;
+            return {x, y};
+        }
+        
+        function canvasToComplex(point, canvas, domain) {
+            const real = domain.xMin + (point.x / canvas.width) * (domain.xMax - domain.xMin);
+            const imag = domain.yMax - (point.y / canvas.height) * (domain.yMax - domain.yMin);
+            return new Complex(real, imag);
+        }
+        
+        // Drawing functions
+        function drawGrid(ctx, canvas, domain) {
+            ctx.strokeStyle = '#f0f0f0';
+            ctx.lineWidth = 1;
+            
+            // Vertical lines
+            for (let i = 0; i <= 10; i++) {
+                const x = (i / 10) * canvas.width;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            // Horizontal lines
+            for (let i = 0; i <= 10; i++) {
+                const y = (i / 10) * canvas.height;
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Axes
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
+            
+            const centerX = (-domain.xMin / (domain.xMax - domain.xMin)) * canvas.width;
+            const centerY = (domain.yMax / (domain.yMax - domain.yMin)) * canvas.height;
+            
+            if (centerX >= 0 && centerX <= canvas.width) {
+                ctx.beginPath();
+                ctx.moveTo(centerX, 0);
+                ctx.lineTo(centerX, canvas.height);
+                ctx.stroke();
+            }
+            
+            if (centerY >= 0 && centerY <= canvas.height) {
+                ctx.beginPath();
+                ctx.moveTo(0, centerY);
+                ctx.lineTo(canvas.width, centerY);
+                ctx.stroke();
+            }
+        }
+        
+        function drawPoint(ctx, canvas, z, domain, color = 'black', size = 5) {
+            const pos = complexToCanvas(z, canvas, domain);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, size, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        
+        function drawTrajectories(ctx, canvas, domain) {
+            const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
+            
+            for (let i = 0; i < rootTrajectories.length; i++) {
+                const trajectory = rootTrajectories[i];
+                if (trajectory.length < 2) continue;
+                
+                ctx.strokeStyle = colors[i % colors.length];
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.8;
+                
+                ctx.beginPath();
+                const startPos = complexToCanvas(trajectory[0], canvas, domain);
+                
+                // Check if start position is within canvas bounds
+                if (startPos.x >= 0 && startPos.x <= canvas.width && 
+                    startPos.y >= 0 && startPos.y <= canvas.height) {
+                    ctx.moveTo(startPos.x, startPos.y);
+                    
+                    for (let j = 1; j < trajectory.length; j++) {
+                        const pos = complexToCanvas(trajectory[j], canvas, domain);
+                        
+                        // Only draw if both points are reasonable and close enough
+                        const prevPos = complexToCanvas(trajectory[j-1], canvas, domain);
+                        const distance = Math.sqrt((pos.x - prevPos.x)**2 + (pos.y - prevPos.y)**2);
+                        
+                        if (distance < canvas.width / 4 && // Prevent huge jumps
+                            pos.x >= -50 && pos.x <= canvas.width + 50 &&
+                            pos.y >= -50 && pos.y <= canvas.height + 50) {
+                            ctx.lineTo(pos.x, pos.y);
+                        } else {
+                            // Start a new path segment if there's a discontinuity
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.moveTo(pos.x, pos.y);
+                        }
+                    }
+                    
+                    ctx.stroke();
+                }
+                
+                ctx.globalAlpha = 1;
+            }
+        }
+        
+        function updateVisualization() {
+            // Clear canvases
+            xCtx.clearRect(0, 0, xCanvas.width, xCanvas.height);
+            yCtx.clearRect(0, 0, yCanvas.width, yCanvas.height);
+            
+            // Draw grids
+            drawGrid(xCtx, xCanvas, currentPolynomial.domain);
+            drawGrid(yCtx, yCanvas, currentPolynomial.codomain);
+            
+            // Find current roots
+            const newRoots = findRoots(currentX, currentPolynomial, currentRoots);
+            currentRoots = findClosestRoots(newRoots, currentRoots);
+            
+            // Update trajectories
+            if (rootTrajectories.length === 0) {
+                for (let i = 0; i < currentRoots.length; i++) {
+                    rootTrajectories.push([]);
+                }
+            }
+            
+            for (let i = 0; i < currentRoots.length; i++) {
+                if (rootTrajectories[i]) {
+                    rootTrajectories[i].push(new Complex(currentRoots[i].real, currentRoots[i].imag));
+                    // Limit trajectory length for performance
+                    if (rootTrajectories[i].length > MAX_TRAJECTORY_LENGTH) {
+                        rootTrajectories[i].shift();
+                    }
+                }
+            }
+            
+            // Draw trajectories
+            drawTrajectories(yCtx, yCanvas, currentPolynomial.codomain);
+            
+            // Draw critical points
+            if (currentPolynomial.criticalPoints) {
+                for (const cp of currentPolynomial.criticalPoints) {
+                    drawPoint(xCtx, xCanvas, cp, currentPolynomial.domain, 'black', 4);
+                }
+            }
+            
+            // Draw current position
+            drawPoint(xCtx, xCanvas, currentX, currentPolynomial.domain, '#e74c3c', 6);
+            drawPoint(xCtx, xCanvas, currentX, currentPolynomial.domain, 'white', 4);
+            
+            // Draw current roots
+            const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
+            for (let i = 0; i < currentRoots.length; i++) {
+                drawPoint(yCtx, yCanvas, currentRoots[i], currentPolynomial.codomain, colors[i % colors.length], 6);
+                drawPoint(yCtx, yCanvas, currentRoots[i], currentPolynomial.codomain, 'white', 4);
+            }
+            
+            // Update status
+            const expectedRoots = currentPolynomial.degree > 10 ? Math.min(currentPolynomial.degree, 10) : currentPolynomial.degree;
+            const rootsText = currentRoots.length > 0 ? 
+                currentRoots.map((r, i) => `y${i+1} = ${r.real.toFixed(2)} ${r.imag >= 0 ? '+' : ''}${r.imag.toFixed(2)}i`).join(', ') :
+                'No roots found';
+            document.getElementById('status').textContent = `Current position: x = ${currentX.toString()} | Roots (${currentRoots.length}/${expectedRoots}): ${rootsText}`;
+        }
+        
+        // Event handlers
+        function getMousePos(canvas, e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+        
+        xCanvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            const mousePos = getMousePos(xCanvas, e);
+            currentX = canvasToComplex(mousePos, xCanvas, currentPolynomial.domain);
+            updateVisualization();
+        });
+        
+        xCanvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const mousePos = getMousePos(xCanvas, e);
+                currentX = canvasToComplex(mousePos, xCanvas, currentPolynomial.domain);
+                updateVisualization();
+            }
+        });
+        
+        xCanvas.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+        
+        xCanvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+        });
+        
+        // Animation function
+        function animate() {
+            if (!isAnimating) return;
+            
+            animationAngle += 0.02;
+            currentX = new Complex(
+                animationRadius * Math.cos(animationAngle),
+                animationRadius * Math.sin(animationAngle)
+            );
+            updateVisualization();
+            requestAnimationFrame(animate);
+        }
+        
+        function toggleAnimation() {
+            isAnimating = !isAnimating;
+            if (isAnimating) {
+                animationAngle = 0;
+                animate();
+            }
+        }
+        
+        // Keyboard event handlers
+        document.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'c':
+                    clearTrajectories();
+                    break;
+                case 'r':
+                    resetPosition();
+                    break;
+                case ' ':
+                    e.preventDefault();
+                    toggleAnimation();
+                    break;
+                case '1':
+                    document.getElementById('functionSelect').value = 'sqrt';
+                    changePolynomial();
+                    break;
+                case '2':
+                    document.getElementById('functionSelect').value = 'quartic';
+                    changePolynomial();
+                    break;
+                case '3':
+                    document.getElementById('functionSelect').value = 'cubic';
+                    changePolynomial();
+                    break;
+                case '4':
+                    document.getElementById('functionSelect').value = 'quintic';
+                    changePolynomial();
+                    break;
+                case '5':
+                    document.getElementById('functionSelect').value = 'elliptic';
+                    changePolynomial();
+                    break;
+                case '6':
+                    document.getElementById('functionSelect').value = 'hyperelliptic';
+                    changePolynomial();
+                    break;
+                case '7':
+                    document.getElementById('functionSelect').value = 'fermat';
+                    changePolynomial();
+                    break;
+            }
+        });
+        function changePolynomial() {
+            const select = document.getElementById('functionSelect');
+            currentPolynomial = polynomials[select.value];
+            currentX = new Complex(currentPolynomial.initialX.real, currentPolynomial.initialX.imag);
+            currentRoots = [];
+            rootTrajectories = [];
+            
+            document.getElementById('mathDisplay').textContent = `F(x,y) = ${currentPolynomial.equation}`;
+            updateVisualization();
+        }
+        
+        function clearTrajectories() {
+            rootTrajectories = [];
+            updateVisualization();
+        }
+        
+        function resetPosition() {
+            currentX = new Complex(currentPolynomial.initialX.real, currentPolynomial.initialX.imag);
+            currentRoots = [];
+            rootTrajectories = [];
+            updateVisualization();
+        }
+        
+        function forceRefreshRoots() {
+            currentRoots = [];
+            updateVisualization();
+        }
+        
+        // Initialize
+        document.getElementById('functionSelect').addEventListener('change', changePolynomial);
+        
+        // Initial setup
+        changePolynomial();
+        
+        // Make functions globally available
+        window.clearTrajectories = clearTrajectories;
+        window.resetPosition = resetPosition;
+        window.toggleAnimation = toggleAnimation;
+        window.forceRefreshRoots = forceRefreshRoots;
+    </script>
+</body>
+</html>
